@@ -1,6 +1,6 @@
-# Kwizdb
+# Dockbase
 
-Kwizdb is a Rust-based DBMS designed for experimentation.
+Dockbase is a Rust-based DBMS designed for experimentation.
 
 ## Commit Convention
 
