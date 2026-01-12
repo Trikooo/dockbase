@@ -1,0 +1,86 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+
+pub enum ExceptionType {
+    Invalid = 0,
+    OutOfRange = 1,
+    Conversion = 2,
+    UnknownType = 3,
+    Decimal = 4,
+    MismatchType = 5,
+    DivideByZero = 6,
+    IncompatibleType = 8,
+    OutOfMemory = 9,
+    NotImplemented = 11,
+    Execution = 12,
+}
+#[macro_export]
+macro_rules! throw {
+    ($variant:ident, $msg:expr) => {
+        return Err(Exception::$variant($msg.to_string()))
+    };
+}
+macro_rules! define_exceptions{
+  ($($variant:ident => ($enum_val:path, $string:expr)),* $(,)?) => {
+    #[derive(Debug)]
+    pub enum Exception {
+      $($variant(String),)*
+      IO(std::io::Error),
+    }
+    impl Exception {
+      pub fn get_type(&self) -> ExceptionType {
+        match self{
+          $(Self::$variant(_) => $enum_val, )*
+          Self::IO(_) => ExceptionType::Invalid,
+        }
+      }
+      pub fn type_to_string(exception_type: ExceptionType) -> &'static str{
+        match exception_type{
+          $($enum_val => $string,)*
+        }
+      }
+    }
+    impl std::fmt::Display for Exception {
+      fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result{
+        // ANSI Color Codes
+        let red = "\x1b[1;31m";
+        let yellow = "\x1b[33m";
+        let reset = "\x1b[0m";
+        match self {
+          $(
+            Self::$variant(msg) => write!(
+              f,
+              "{}Exception Type: {}{}\n{}Message: {}{}{}",
+              red, $string, reset, yellow, msg, reset, ""
+            ),
+          )*
+          Self::IO(err) => write!(
+            f,
+            "{}Exception Type: Invalid{}\n{}Message: IO Error: {}{}",
+            red, reset, yellow, err, reset
+          ),
+        }
+      }
+    }
+  }
+}
+define_exceptions! {
+    Invalid => (ExceptionType::Invalid, "Invalid"),
+    OutOfRange => (ExceptionType::OutOfRange, "Out of Range"),
+    Conversion => (ExceptionType::Conversion, "Conversion"),
+    UnknownType => (ExceptionType::UnknownType, "Unknown Type"),
+    Decimal => (ExceptionType::Decimal, "Decimal"),
+    MismatchType => (ExceptionType::MismatchType, "Mismatch Type"),
+    DivideByZero => (ExceptionType::DivideByZero, "Divide by Zero"),
+    IncompatibleType => (ExceptionType::IncompatibleType, "Incompatible type"),
+    OutOfMemory => (ExceptionType::OutOfMemory, "Out of Memory"),
+    NotImplemented => (ExceptionType::NotImplemented, "Not implemented"),
+    Execution => (ExceptionType::Execution, "Execution"),
+}
+
+impl std::error::Error for Exception {}
+
+impl From<std::io::Error> for Exception {
+    fn from(error: std::io::Error) -> Self {
+        Self::IO(error)
+    }
+}
