@@ -1,3 +1,4 @@
+use std::io::{IsTerminal, stdout};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const LOG_LEVEL_OFF: i32 = 1000;
@@ -38,7 +39,15 @@ fn format_timestamp() -> String {
 }
 
 pub fn output_log_header(file: &str, line: u32, func: &str, level: i32) {
+    let use_color = stdout().is_terminal();
     let timestamp = format_timestamp();
+
+    let (yellow, blue, reset) = if use_color {
+        ("\x1b[33m", "\x1b[34m", "\x1b[0m")
+    } else {
+        ("", "", "")
+    };
+
     let level_str = match level {
         LOG_LEVEL_ERROR => "ERROR",
         LOG_LEVEL_WARN => "WARN",
@@ -47,17 +56,23 @@ pub fn output_log_header(file: &str, line: u32, func: &str, level: i32) {
         LOG_LEVEL_TRACE => "TRACE",
         _ => "UNKNOWN",
     };
-    let level_color = match level {
-        LOG_LEVEL_ERROR => "\x1b[31m", // Red
-        LOG_LEVEL_WARN => "\x1b[33m", // Yellow
-        LOG_LEVEL_INFO => "\x1b[34m",  // Blue
-        LOG_LEVEL_DEBUG => "\x1b[35m", // Magenta
-        LOG_LEVEL_TRACE => "\x1b[38;5;92m", // Deep purple
-        _ => "\x1b[0m",
+
+    let level_color = if use_color {
+        match level {
+            LOG_LEVEL_ERROR => "\x1b[31m",      // Red
+            LOG_LEVEL_WARN => "\x1b[33m",       // Yellow
+            LOG_LEVEL_INFO => "\x1b[34m",       // Blue
+            LOG_LEVEL_DEBUG => "\x1b[35m",      // Magenta
+            LOG_LEVEL_TRACE => "\x1b[38;5;92m", // Deep purple
+            _ => "",
+        }
+    } else {
+        ""
     };
+
     print!(
-        "\x1b[33m{}\x1b[0m [\x1b[34m{}:{}:{}\x1b[0m] {}{}{}\x1b[0m - ",
-        timestamp, file, line, func, level_color, level_str, "\x1b[0m"
+        "{yellow}{}{reset} [{blue}{}:{}:{}{reset}] {}{}{reset} - ",
+        timestamp, file, line, func, level_color, level_str
     );
 }
 

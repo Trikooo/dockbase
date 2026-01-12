@@ -40,17 +40,20 @@ macro_rules! define_exceptions{
       }
     }
     impl std::fmt::Display for Exception {
-      fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result{
-        // ANSI Color Codes
-        let red = "\x1b[1;31m";
-        let yellow = "\x1b[33m";
-        let reset = "\x1b[0m";
+      fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::io::{stdout, IsTerminal};
+        let use_color = stdout().is_terminal();
+
+        let red = if use_color { "\x1b[1;31m" } else { "" };
+        let yellow = if use_color { "\x1b[33m" } else { "" };
+        let reset = if use_color { "\x1b[0m" } else { "" };
+
         match self {
           $(
             Self::$variant(msg) => write!(
               f,
-              "{}Exception Type: {}{}\n{}Message: {}{}{}",
-              red, $string, reset, yellow, msg, reset, ""
+              "{}Exception Type: {}{}\n{}Message: {}{}",
+              red, $string, reset, yellow, msg, reset
             ),
           )*
           Self::IO(err) => write!(
