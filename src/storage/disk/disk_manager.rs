@@ -56,7 +56,7 @@ impl DiskManager {
             .write(true)
             .create(true)
             .open(&db_file_name)?;
-        let _ = db_io.set_len(((DEFAULT_DB_IO_SIZE + 1) * DOCKBASE_PAGE_SIZE) as u64);
+        db_io.set_len(((DEFAULT_DB_IO_SIZE + 1) * DOCKBASE_PAGE_SIZE) as u64)?;
         Ok(Self {
             db_file_name,
             log_file_name,
