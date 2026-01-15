@@ -29,6 +29,12 @@ struct Metadata {
     flush_log: bool,
     flush_log_f: Option<()>,
 }
+struct AllocationGuard<'a> {
+    metadata: &'a Mutex<Metadata>,
+    offset: usize,
+    is_new: bool,
+    active: bool,
+}
 
 impl DiskManager {
     pub fn new(db_file_name: PathBuf) -> Result<Self, Exception> {
@@ -146,5 +152,29 @@ impl DiskManager {
             self.db_io.lock()?.set_len(new_size)?;
         }
         Ok(offset)
+    }
+}
+
+impl<'a> AllocationGuard<'a> {
+    fn new(metadata: &'a Mutex<Metadata>, offset: usize, is_new: bool) -> Self {
+        Self {
+            metadata,
+            offset,
+            is_new,
+            active: true,
+        }
+    }
+    fn commit(&mut self) {
+        self.active = false;
+    }
+}
+
+impl Drop for AllocationGuard<'_> {
+    fn drop(&mut self) {
+        if self.active && self.is_new {
+            if let Ok(mut metadata_guard) = self.metadata.lock() {
+                metadata_guard.free_slots.push(self.offset);
+            }
+        }
     }
 }
