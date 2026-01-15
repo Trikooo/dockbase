@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fs::File, path::PathBuf, sync::{Mutex, MutexGuard}};
+use std::{collections::HashMap, fs::{File, OpenOptions}, path::PathBuf, sync::{Mutex, MutexGuard}};
 
-use crate::common::{config::PageId, exception::Exception};
+use crate::common::{config::{DEFAULT_DB_IO_SIZE, DOCKBASE_PAGE_SIZE, PageId}, exception::Exception};
 
 pub struct DiskManager {
     db_file_name: PathBuf,
@@ -23,9 +23,44 @@ struct Metadata {
 }
 
 impl DiskManager {
-    pub fn new(_db_file_name: PathBuf) -> Result<Self, Exception> {
-        unimplemented!()
+    pub fn new(db_file_name: PathBuf) -> Result<Self, Exception> {
+        let stem = db_file_name
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or(Exception::Invalid("Invalid filename"))?;
+        let log_file_name = format!("{stem}.log").into();
+
+        let log_io = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .append(true)
+            .create(true)
+            .open(&log_file_name)?;
+        let db_io = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&db_file_name)?;
+        let _ = db_io.set_len(((DEFAULT_DB_IO_SIZE + 1) * DOCKBASE_PAGE_SIZE) as u64);
+        Ok(Self {
+            db_file_name,
+            log_file_name,
+            db_io: Mutex::new(db_io),
+            log_io: Mutex::new(log_io),
+            metadata: Mutex::new(Metadata {
+                num_flushes: 0,
+                num_writes: 0,
+                num_deletes: 0,
+                page_count: 0,
+                page_capacity: DEFAULT_DB_IO_SIZE,
+                pages: HashMap::new(),
+                free_slots: Vec::new(),
+                flush_log: false,
+                flush_log_f: None,
+            }),
+        })
     }
+
 
     pub fn shut_down(&self) -> Result<(), Exception> {
         unimplemented!()
