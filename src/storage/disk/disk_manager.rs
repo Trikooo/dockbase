@@ -77,7 +77,11 @@ impl DiskManager {
     }
 
     pub fn shut_down(&self) -> Result<(), Exception> {
-        unimplemented!()
+        let db_guard = self.db_io.lock()?;
+        drop(db_guard);
+        let log_guard = self.log_io.lock()?;
+        drop(log_guard);
+        Ok(())
     }
 
     pub fn write_page(&mut self, page_id: PageId, page_data: &[u8]) -> Result<(), Exception> {
