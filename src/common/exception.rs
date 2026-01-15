@@ -16,14 +16,14 @@ pub enum ExceptionType {
 #[macro_export]
 macro_rules! throw {
     ($variant:ident, $msg:expr) => {
-        return Err(Exception::$variant($msg.to_string()))
+        return Err(Exception::$variant($msg))
     };
 }
 macro_rules! define_exceptions{
   ($($variant:ident => ($enum_val:path, $string:expr)),* $(,)?) => {
     #[derive(Debug)]
     pub enum Exception {
-      $($variant(String),)*
+      $($variant(&'static str),)*
       IO(std::io::Error),
     }
     impl Exception {
@@ -85,5 +85,11 @@ impl std::error::Error for Exception {}
 impl From<std::io::Error> for Exception {
     fn from(error: std::io::Error) -> Self {
         Self::IO(error)
+    }
+}
+
+impl<T> From<std::sync::PoisonError<T>> for Exception {
+    fn from(_: std::sync::PoisonError<T>) -> Self {
+        Self::Execution("Lock poisoned")
     }
 }
