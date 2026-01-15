@@ -1,6 +1,14 @@
-use std::{collections::HashMap, fs::{File, OpenOptions}, path::PathBuf, sync::{Mutex, MutexGuard}};
+use std::{
+    collections::HashMap,
+    fs::{File, OpenOptions},
+    path::PathBuf,
+    sync::{Mutex, MutexGuard},
+};
 
-use crate::common::{config::{DEFAULT_DB_IO_SIZE, DOCKBASE_PAGE_SIZE, PageId}, exception::Exception};
+use crate::common::{
+    config::{DEFAULT_DB_IO_SIZE, DOCKBASE_PAGE_SIZE, PageId},
+    exception::Exception,
+};
 
 pub struct DiskManager {
     db_file_name: PathBuf,
@@ -60,7 +68,6 @@ impl DiskManager {
             }),
         })
     }
-
 
     pub fn shut_down(&self) -> Result<(), Exception> {
         unimplemented!()
@@ -124,8 +131,20 @@ impl DiskManager {
 
     fn allocate_page(
         &self,
-        _metadata_guard: &mut MutexGuard<'_, Metadata>,
+        metadata_guard: &mut MutexGuard<'_, Metadata>,
     ) -> Result<usize, Exception> {
-        unimplemented!()
+        if let Some(offset) = metadata_guard.free_slots.pop() {
+            return Ok(offset);
+        }
+
+        let offset = metadata_guard.page_count * DOCKBASE_PAGE_SIZE;
+        metadata_guard.page_count += 1;
+
+        if metadata_guard.page_count > metadata_guard.page_capacity {
+            metadata_guard.page_capacity *= 2;
+            let new_size = (metadata_guard.page_capacity * DOCKBASE_PAGE_SIZE) as u64;
+            self.db_io.lock()?.set_len(new_size)?;
+        }
+        Ok(offset)
     }
 }
