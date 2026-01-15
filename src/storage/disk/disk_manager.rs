@@ -79,8 +79,27 @@ impl DiskManager {
         unimplemented!()
     }
 
-    pub fn write_page(&mut self, _page_id: PageId, _page_data: &[u8]) -> Result<(), Exception> {
-        unimplemented!()
+    pub fn write_page(&mut self, page_id: PageId, page_data: &[u8]) -> Result<(), Exception> {
+        let mut metadata_guard = self.metadata.lock()?;
+        let (offset, is_new) = match metadata_guard.pages.get(&page_id) {
+            Some(&off) => (off, false),
+            None => (self.allocate_page(&mut metadata_guard)?, true),
+        };
+        drop(metadata_guard);
+
+        let mut cleanup_guard = AllocationGuard::new(&self.metadata, offset, is_new);
+
+        let mut db_io_guard = self.db_io.lock()?;
+        db_io_guard.seek(SeekFrom::Start(offset as u64))?;
+        db_io_guard.write_all(page_data)?;
+        db_io_guard.flush()?;
+
+        let mut metadata_guard = self.metadata.lock()?;
+        metadata_guard.pages.insert(page_id, offset);
+        metadata_guard.num_writes += 1;
+
+        cleanup_guard.commit();
+        Ok(())
     }
 
     pub fn read_page(&mut self, _page_id: PageId, _page_data: &mut [u8]) {
