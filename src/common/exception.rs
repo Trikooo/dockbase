@@ -1,5 +1,4 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-
 pub enum ExceptionType {
     Invalid = 0,
     OutOfRange = 1,
@@ -12,33 +11,37 @@ pub enum ExceptionType {
     OutOfMemory = 9,
     NotImplemented = 11,
     Execution = 12,
+    IO = 13,
 }
+
 #[macro_export]
 macro_rules! throw {
     ($variant:ident, $msg:expr) => {
         return Err(Exception::$variant($msg))
     };
 }
-macro_rules! define_exceptions{
+
+macro_rules! define_exceptions {
   ($($variant:ident => ($enum_val:path, $string:expr)),* $(,)?) => {
     #[derive(Debug)]
     pub enum Exception {
       $($variant(&'static str),)*
-      IO(std::io::Error),
     }
+
     impl Exception {
       pub fn get_type(&self) -> ExceptionType {
-        match self{
-          $(Self::$variant(_) => $enum_val, )*
-          Self::IO(_) => ExceptionType::Invalid,
+        match self {
+          $(Self::$variant(_) => $enum_val,)*
         }
       }
-      pub fn type_to_string(exception_type: ExceptionType) -> &'static str{
-        match exception_type{
+
+      pub fn type_to_string(exception_type: ExceptionType) -> &'static str {
+        match exception_type {
           $($enum_val => $string,)*
         }
       }
     }
+
     impl std::fmt::Display for Exception {
       fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use std::io::{stdout, IsTerminal};
@@ -56,16 +59,12 @@ macro_rules! define_exceptions{
               red, $string, reset, yellow, msg, reset
             ),
           )*
-          Self::IO(err) => write!(
-            f,
-            "{}Exception Type: Invalid{}\n{}Message: IO Error: {}{}",
-            red, reset, yellow, err, reset
-          ),
         }
       }
     }
   }
 }
+
 define_exceptions! {
     Invalid => (ExceptionType::Invalid, "Invalid"),
     OutOfRange => (ExceptionType::OutOfRange, "Out of Range"),
@@ -78,13 +77,14 @@ define_exceptions! {
     OutOfMemory => (ExceptionType::OutOfMemory, "Out of Memory"),
     NotImplemented => (ExceptionType::NotImplemented, "Not implemented"),
     Execution => (ExceptionType::Execution, "Execution"),
+    IO => (ExceptionType::IO, "IO Error"),
 }
 
 impl std::error::Error for Exception {}
 
 impl From<std::io::Error> for Exception {
-    fn from(error: std::io::Error) -> Self {
-        Self::IO(error)
+    fn from(_error: std::io::Error) -> Self {
+        Self::IO("Internal I/O subsystem error")
     }
 }
 
