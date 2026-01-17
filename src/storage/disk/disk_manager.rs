@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::{File, OpenOptions},
-    io::{Seek, SeekFrom, Write},
+    io::{Read, Seek, SeekFrom, Write},
     path::PathBuf,
     sync::{Mutex, MutexGuard},
 };
@@ -107,8 +107,32 @@ impl DiskManager {
         Ok(())
     }
 
-    pub fn read_page(&mut self, _page_id: PageId, _page_data: &mut [u8]) {
-        unimplemented!()
+    pub fn read_page(&self, page_id: PageId, page_data: &mut [u8]) -> Result<(), Exception> {
+        let metadata_guard = self.metadata.lock()?;
+        let &offset = metadata_guard
+            .pages
+            .get(&page_id)
+            .ok_or(Exception::Invalid("Page not found in disk mapping"))?;
+        drop(metadata_guard);
+        let mut db_io_guard = self.db_io.lock()?;
+        let file_size = db_io_guard.metadata()?.len();
+        if offset as u64 >= file_size {
+            return Err(Exception::IO("Read offset past end of file"));
+        }
+        db_io_guard.seek(SeekFrom::Start(offset as u64))?;
+
+        let mut bytes_total: usize = 0;
+        while bytes_total < page_data.len() {
+          let bytes = db_io_guard.read(&mut page_data[bytes_total..])?;
+          if bytes == 0 {
+            break; // EOF reached
+          }
+          bytes_total += bytes;
+        }
+        if bytes_total < DOCKBASE_PAGE_SIZE {
+          page_data[bytes_total..].fill(0)
+        }
+        Ok(())
     }
 
     pub fn delete_page(&mut self, _page_id: PageId) {
