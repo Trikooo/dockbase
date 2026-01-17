@@ -123,20 +123,25 @@ impl DiskManager {
 
         let mut bytes_total: usize = 0;
         while bytes_total < page_data.len() {
-          let bytes = db_io_guard.read(&mut page_data[bytes_total..])?;
-          if bytes == 0 {
-            break; // EOF reached
-          }
-          bytes_total += bytes;
+            let bytes = db_io_guard.read(&mut page_data[bytes_total..])?;
+            if bytes == 0 {
+                break; // EOF reached
+            }
+            bytes_total += bytes;
         }
         if bytes_total < DOCKBASE_PAGE_SIZE {
-          page_data[bytes_total..].fill(0)
+            page_data[bytes_total..].fill(0)
         }
         Ok(())
     }
 
-    pub fn delete_page(&mut self, _page_id: PageId) {
-        unimplemented!()
+    pub fn delete_page(&self, page_id: PageId) -> Result<(), Exception> {
+        let mut metadata_guard = self.metadata.lock()?;
+        if let Some(offset) = metadata_guard.pages.remove(&page_id) {
+            metadata_guard.free_slots.push(offset);
+            metadata_guard.num_deletes += 1;
+        }
+        Ok(())
     }
 
     pub fn write_log(&mut self, _log_data: &[u8]) {
