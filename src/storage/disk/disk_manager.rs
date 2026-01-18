@@ -28,7 +28,6 @@ struct Metadata {
     pages: HashMap<PageId, usize>,
     free_slots: Vec<usize>,
     flush_log: bool,
-    flush_log_f: Option<()>,
 }
 struct AllocationGuard<'a> {
     metadata: &'a Mutex<Metadata>,
@@ -70,8 +69,7 @@ impl DiskManager {
                 page_capacity: DEFAULT_DB_IO_SIZE,
                 pages: HashMap::new(),
                 free_slots: Vec::new(),
-                flush_log: false,
-                flush_log_f: None,
+                flush_log: false,d
             }),
         })
     }
@@ -144,8 +142,23 @@ impl DiskManager {
         Ok(())
     }
 
-    pub fn write_log(&mut self, _log_data: &[u8]) {
-        unimplemented!()
+    pub fn write_log(&self, log_data: &[u8]) -> Result<(), Exception> {
+        if log_data.is_empty() {
+            return Ok(());
+        }
+        {
+            let mut metadata_guard = self.metadata.lock()?;
+            metadata_guard.flush_log = true;
+        }
+
+        let mut log_io_guard = self.log_io.lock()?;
+        log_io_guard.write_all(log_data)?;
+        log_io_guard.flush()?;
+
+        let mut metadata_guard = self.metadata.lock()?;
+        metadata_guard.num_flushes += 1;
+        metadata_guard.flush_log = false;
+        Ok(())
     }
 
     pub fn read_log(&mut self, _log_data: &mut [u8], _size: usize, _offset: usize) -> bool {
