@@ -69,7 +69,7 @@ impl DiskManager {
                 page_capacity: DEFAULT_DB_IO_SIZE,
                 pages: HashMap::new(),
                 free_slots: Vec::new(),
-                flush_log: false,d
+                flush_log: false,
             }),
         })
     }
