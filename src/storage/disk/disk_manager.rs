@@ -187,39 +187,21 @@ impl DiskManager {
 
         Ok(true)
     }
-
-    pub fn get_num_flushes(&self) -> i32 {
-        unimplemented!()
+    pub fn get_num_flushes(&self) -> Result<i32, Exception> {
+        Ok(self.metadata.lock()?.num_flushes)
     }
 
-    pub fn get_flush_state(&self) -> bool {
-        unimplemented!()
+    pub fn get_log_flush_state(&self) -> Result<bool, Exception> {
+        Ok(self.metadata.lock()?.flush_log)
     }
 
-    pub fn get_num_writes(&self) -> i32 {
-        unimplemented!()
+    pub fn get_num_writes(&self) -> Result<i32, Exception> {
+        Ok(self.metadata.lock()?.num_writes)
     }
 
-    pub fn get_num_deletes(&self) -> i32 {
-        unimplemented!()
+    pub fn get_num_deletes(&self) -> Result<i32, Exception> {
+        Ok(self.metadata.lock()?.num_deletes)
     }
-
-    pub fn set_flush_log_future(&mut self, _f: ()) {
-        unimplemented!()
-    }
-
-    pub fn has_flush_log_future(&self) -> bool {
-        unimplemented!()
-    }
-
-    pub fn get_log_file_name(&self) -> &PathBuf {
-        unimplemented!()
-    }
-
-    pub fn get_db_file_size(&self) -> isize {
-        unimplemented!()
-    }
-
     fn allocate_page(
         &self,
         metadata_guard: &mut MutexGuard<'_, Metadata>,
