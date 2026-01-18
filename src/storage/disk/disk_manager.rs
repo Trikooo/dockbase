@@ -161,8 +161,31 @@ impl DiskManager {
         Ok(())
     }
 
-    pub fn read_log(&mut self, _log_data: &mut [u8], _size: usize, _offset: usize) -> bool {
-        unimplemented!()
+    pub fn read_log(&self, log_data: &mut [u8], offset: usize) -> Result<bool, Exception> {
+        let mut log_io_guard = self.log_io.lock()?;
+
+        let file_size = log_io_guard.metadata()?.len() as usize;
+        if offset >= file_size {
+            return Ok(false);
+        }
+
+        log_io_guard.seek(SeekFrom::Start(offset as u64))?;
+
+        let size = log_data.len();
+        let mut bytes_total = 0;
+        while bytes_total < size {
+            let bytes = log_io_guard.read(&mut log_data[bytes_total..])?;
+            if bytes == 0 {
+                break;
+            }
+            bytes_total += bytes;
+        }
+
+        if bytes_total < size {
+            log_data[bytes_total..].fill(0);
+        }
+
+        Ok(true)
     }
 
     pub fn get_num_flushes(&self) -> i32 {
@@ -194,10 +217,6 @@ impl DiskManager {
     }
 
     pub fn get_db_file_size(&self) -> isize {
-        unimplemented!()
-    }
-
-    fn get_file_size(&self, _file_name: &str) -> isize {
         unimplemented!()
     }
 
