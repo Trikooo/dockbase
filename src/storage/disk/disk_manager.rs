@@ -245,3 +245,224 @@ impl Drop for AllocationGuard<'_> {
         }
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
+
+    fn setup(db_name: &str) -> (DiskManager, PathBuf, PathBuf) {
+        let db_path = PathBuf::from(db_name);
+        let log_path = PathBuf::from(format!(
+            "{}.log",
+            db_path.file_stem().unwrap().to_str().unwrap()
+        ));
+        let _ = fs::remove_file(&db_path);
+        let _ = fs::remove_file(&log_path);
+        (
+            DiskManager::new(db_path.clone()).unwrap(),
+            db_path,
+            log_path,
+        )
+    }
+
+    fn teardown(db_path: PathBuf, log_path: PathBuf) {
+        let _ = fs::remove_file(db_path);
+        let _ = fs::remove_file(log_path);
+    }
+
+    #[test]
+    fn test_page_read_write() -> Result<(), Exception> {
+        let (disk_manager, db_path, log_path) = setup("test_rw.db");
+        let page_id = 10;
+        let mut content = [0u8; DOCKBASE_PAGE_SIZE];
+        content[0..5].copy_from_slice(b"hello");
+
+        disk_manager.write_page(page_id, &content)?;
+        let mut read_buffer = [0u8; DOCKBASE_PAGE_SIZE];
+        disk_manager.read_page(page_id, &mut read_buffer)?;
+
+        assert_eq!(content, read_buffer);
+        assert_eq!(disk_manager.get_num_writes()?, 1);
+
+        teardown(db_path, log_path);
+        Ok(())
+    }
+
+    #[test]
+    fn test_log_sequence() -> Result<(), Exception> {
+        let (dm, db_p, log_p) = setup("test_log.db");
+        let entry1 = b"first_log_entry";
+        let entry2 = b"second_entry";
+
+        dm.write_log(entry1)?;
+        let offset2 = entry1.len();
+        dm.write_log(entry2)?;
+
+        let mut buf1 = vec![0u8; entry1.len()];
+        let mut buf2 = vec![0u8; entry2.len()];
+
+        dm.read_log(&mut buf1, 0)?;
+        dm.read_log(&mut buf2, offset2)?;
+
+        assert_eq!(entry1, buf1.as_slice());
+        assert_eq!(entry2, buf2.as_slice());
+        assert_eq!(dm.get_num_flushes()?, 2);
+
+        teardown(db_p, log_p);
+        Ok(())
+    }
+
+    #[test]
+    fn test_delete_and_reuse() -> Result<(), Exception> {
+        let (dm, db_p, log_p) = setup("test_reuse.db");
+        let data = [1u8; DOCKBASE_PAGE_SIZE];
+
+        dm.write_page(1, &data)?;
+        dm.delete_page(1)?;
+        assert_eq!(dm.get_num_deletes()?, 1);
+
+        dm.write_page(2, &data)?;
+        let metadata = dm.metadata.lock().unwrap();
+        assert_eq!(metadata.free_slots.len(), 0);
+        assert_eq!(metadata.page_count, 1);
+
+        teardown(db_p, log_p);
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_non_existent_page() {
+        let (dm, db_p, log_p) = setup("test_err.db");
+        let mut buf = [0u8; DOCKBASE_PAGE_SIZE];
+        assert!(dm.read_page(99, &mut buf).is_err());
+        teardown(db_p, log_p);
+    }
+
+    #[test]
+    fn test_allocation_guard_rollback() -> Result<(), Exception> {
+        let (dm, db_p, log_p) = setup("test_rollback.db");
+
+        let offset = {
+            let mut metadata = dm.metadata.lock().unwrap();
+            let offset = dm.allocate_page(&mut metadata)?;
+            drop(metadata);
+            let _guard = AllocationGuard::new(&dm.metadata, offset, true);
+            offset
+        };
+
+        let metadata = dm.metadata.lock().unwrap();
+        assert_eq!(metadata.free_slots.len(), 1);
+        assert_eq!(metadata.free_slots[0], offset);
+
+        teardown(db_p, log_p);
+        Ok(())
+    }
+
+    #[test]
+    fn test_partial_read() -> Result<(), Exception> {
+        let (dm, db_p, log_p) = setup("test_partial.db");
+        let page_id = 1;
+        let mut content = [0u8; DOCKBASE_PAGE_SIZE];
+        content[0..10].copy_from_slice(b"partial123");
+
+        dm.write_page(page_id, &content)?;
+        let mut read_buf = [0u8; DOCKBASE_PAGE_SIZE];
+        dm.read_page(page_id, &mut read_buf)?;
+
+        assert_eq!(&read_buf[0..10], b"partial123");
+        assert_eq!(&read_buf[10..], &[0u8; DOCKBASE_PAGE_SIZE - 10]);
+
+        teardown(db_p, log_p);
+        Ok(())
+    }
+
+    #[test]
+    fn test_log_read_beyond_eof() -> Result<(), Exception> {
+        let (dm, db_p, log_p) = setup("test_log_eof.db");
+        let mut buf = [0u8; 10];
+        let res = dm.read_log(&mut buf, 1000)?;
+        assert!(!res);
+        teardown(db_p, log_p);
+        Ok(())
+    }
+
+    #[test]
+    fn test_flush_log_flag() -> Result<(), Exception> {
+        let (dm, db_p, log_p) = setup("test_flush_flag.db");
+        let log_data = b"flush_flag_test";
+
+        {
+            let metadata = dm.metadata.lock().unwrap();
+            assert!(!metadata.flush_log);
+        }
+
+        dm.write_log(log_data)?;
+        assert_eq!(dm.get_num_flushes()?, 1);
+        assert_eq!(dm.get_log_flush_state()?, false);
+
+        teardown(db_p, log_p);
+        Ok(())
+    }
+
+    #[test]
+    fn test_shutdown() -> Result<(), Exception> {
+        let (dm, db_p, log_p) = setup("test_shutdown.db");
+        dm.shut_down()?;
+        teardown(db_p, log_p);
+        Ok(())
+    }
+
+    #[test]
+    fn test_concurrent_writes_reads() -> Result<(), Exception> {
+        let (dm, db_p, log_p) = setup("test_concurrent.db");
+        let dm = Arc::new(dm); // Now using Arc directly because of &self
+        let barrier = Arc::new(Barrier::new(4));
+        let mut handles = Vec::new();
+
+        for i in 0..4 {
+            let dm_clone = Arc::clone(&dm);
+            let barrier_clone = Arc::clone(&barrier);
+            handles.push(thread::spawn(move || {
+                let mut data = [0u8; DOCKBASE_PAGE_SIZE];
+                data[0] = i as u8;
+                barrier_clone.wait();
+
+                dm_clone.write_page(i, &data).unwrap();
+
+                let mut read_buf = [0u8; DOCKBASE_PAGE_SIZE];
+                dm_clone.read_page(i, &mut read_buf).unwrap();
+                assert_eq!(read_buf[0], i as u8);
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        teardown(db_p, log_p);
+        Ok(())
+    }
+
+    #[test]
+    fn test_allocate_page_expansion() -> Result<(), Exception> {
+        let (dm, db_p, log_p) = setup("test_expand.db");
+        let mut metadata = dm.metadata.lock().unwrap();
+        let initial_capacity = metadata.page_capacity;
+        metadata.page_count = initial_capacity;
+        drop(metadata);
+
+        let offset = {
+            let mut metadata = dm.metadata.lock().unwrap();
+            dm.allocate_page(&mut metadata)?
+        };
+
+        let metadata = dm.metadata.lock().unwrap();
+        assert!(metadata.page_capacity > initial_capacity);
+        assert!(offset >= initial_capacity * DOCKBASE_PAGE_SIZE);
+
+        teardown(db_p, log_p);
+        Ok(())
+    }
+}
