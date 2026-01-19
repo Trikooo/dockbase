@@ -82,7 +82,7 @@ impl DiskManager {
         Ok(())
     }
 
-    pub fn write_page(&mut self, page_id: PageId, page_data: &[u8]) -> Result<(), Exception> {
+    pub fn write_page(&self, page_id: PageId, page_data: &[u8]) -> Result<(), Exception> {
         let mut metadata_guard = self.metadata.lock()?;
         let (offset, is_new) = match metadata_guard.pages.get(&page_id) {
             Some(&off) => (off, false),
