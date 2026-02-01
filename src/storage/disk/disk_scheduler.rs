@@ -4,6 +4,7 @@ use std::thread::{self, JoinHandle};
 
 use crate::common::channel::Channel;
 use crate::common::config::{DOCKBASE_PAGE_SIZE, PageId};
+use crate::common::exception::Exception;
 use crate::storage::disk::disk_manager::DiskManager;
 
 pub enum RequestType {
@@ -37,6 +38,12 @@ impl DiskScheduler {
             request_queue,
             background_thread: Some(background_thread),
         }
+    }
+    pub fn schedule(&self, requests: Vec<DiskRequest>) -> Result<(), Exception>{
+      for request in requests {
+        self.request_queue.put(Some(request))?;
+      }
+      Ok(())
     }
     pub fn start_worker_thread(
         disk_manager: Arc<DiskManager>,
