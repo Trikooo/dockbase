@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
-use std::thread::{JoinHandle};
+use std::thread::{self, JoinHandle};
 
 use crate::common::channel::Channel;
 use crate::common::config::{DOCKBASE_PAGE_SIZE, PageId};
@@ -23,7 +23,21 @@ pub struct DiskScheduler {
 }
 
 impl DiskScheduler {
+    pub fn new(disk_manager: Arc<DiskManager>) -> Self {
+        let request_queue = Arc::new(Channel::<Option<DiskRequest>>::new());
 
+        let worker_disk_manager = disk_manager.clone();
+        let worker_queue = request_queue.clone();
+
+        let background_thread = thread::spawn(move || {
+            Self::start_worker_thread(worker_disk_manager, worker_queue);
+        });
+        Self {
+            disk_manager,
+            request_queue,
+            background_thread: Some(background_thread),
+        }
+    }
     pub fn start_worker_thread(
         disk_manager: Arc<DiskManager>,
         queue: Arc<Channel<Option<DiskRequest>>>,
@@ -39,4 +53,5 @@ impl DiskScheduler {
         }
     }
 }
-
+unsafe impl Send for DiskRequest {}
+unsafe impl Sync for DiskRequest {}
