@@ -62,3 +62,14 @@ impl DiskScheduler {
 }
 unsafe impl Send for DiskRequest {}
 unsafe impl Sync for DiskRequest {}
+
+impl Drop for DiskScheduler {
+  fn drop(&mut self){
+    // We ignore the result because if the queue is poisoned,
+    // the thread is likely already dead.
+    let _ = self.request_queue.put(None);
+    if let Some(handle) = self.background_thread.take() {
+      let _ = handle.join();
+    }
+  }
+}
