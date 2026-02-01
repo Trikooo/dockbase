@@ -39,8 +39,8 @@ impl DiskScheduler {
             background_thread: Some(background_thread),
         }
     }
-    pub fn schedule(&self, requests: Vec<DiskRequest>) -> Result<(), Exception> {
-        for request in requests {
+    pub fn schedule(&self, mut requests: Vec<DiskRequest>) -> Result<(), Exception> {
+        for request in requests.drain(..) {
             self.request_queue.put(Some(request))?;
         }
         Ok(())
