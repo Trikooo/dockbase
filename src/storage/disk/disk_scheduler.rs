@@ -39,13 +39,13 @@ impl DiskScheduler {
             background_thread: Some(background_thread),
         }
     }
-    pub fn schedule(&self, requests: Vec<DiskRequest>) -> Result<(), Exception>{
-      for request in requests {
-        self.request_queue.put(Some(request))?;
-      }
-      Ok(())
+    pub fn schedule(&self, requests: Vec<DiskRequest>) -> Result<(), Exception> {
+        for request in requests {
+            self.request_queue.put(Some(request))?;
+        }
+        Ok(())
     }
-    pub fn start_worker_thread(
+    fn start_worker_thread(
         disk_manager: Arc<DiskManager>,
         queue: Arc<Channel<Option<DiskRequest>>>,
     ) {
